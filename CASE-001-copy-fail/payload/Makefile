@@ -1,7 +1,7 @@
 all:
 	nasm -f elf64 reconstructed_payload.asm	-o payload.o
-	ld payload.o -o payload 
-	strip --strip-all payload
+	ld payload.o -o reconstructed_payload 
+	strip --strip-all reconstructed_payload
 
 clean:
-	rm -f payload payload.o
+	rm -f reconstructed_payload reconstructed_payload.o
