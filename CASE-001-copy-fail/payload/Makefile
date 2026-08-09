@@ -4,4 +4,4 @@ all:
 	strip --strip-all reconstructed_payload
 
 clean:
-	rm -f reconstructed_payload reconstructed_payload.o
+	rm -f reconstructed_payload payload.o
