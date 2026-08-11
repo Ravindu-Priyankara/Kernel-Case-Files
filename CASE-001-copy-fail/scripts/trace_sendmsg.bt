@@ -1,0 +1,156 @@
+#!/usr/bin/env bpftrace
+
+/*
+    Usage:
+        1. chmod +x trace_sendmsg.bt
+        2. sudo ./trace_sendmsg.bt
+*/
+
+#include <linux/socket.h>
+#include <linux/uio.h>
+
+BEGIN{
+    printf("Starting the trace sendmsg syscall...\n");
+}
+
+tracepoint:syscalls:sys_enter_sendmsg{
+
+    $msgh = (struct user_msghdr *)args.msg;
+
+    // extract sockaddr data
+    $msg_name = (struct sockaddr *)$msgh->msg_name;
+    $s_family = $msg_name->sa_family;
+    $name_len = $msgh->msg_namelen;
+
+    // extract iovec data
+    $iovec = $msgh->msg_iov;
+    $iovlen = $msgh->msg_iovlen; 
+    $base = $iovec->iov_base;
+    $base_len = $iovec->iov_len;
+
+    // exact control msg
+    $msg_ctrl = $msgh->msg_control;
+    $msg_ctrl_len = $msgh->msg_controllen;
+
+    //extract flags
+    $msg_flags = $msgh->msg_flags;
+    
+    // Use this filter for my learning. Because I know I'm running a Python3-based exploit script.
+    // But if you use this script against an unknown target. you can't filter like this.
+    // So remove this filter in a real case.
+    if(comm == "python3"){
+
+        // display the process information.
+        printf("=============Start of the process information.==================\n");
+        printf("Process id %d\n", pid);
+        printf("Thread id %d\n", tid);
+        printf("User id %d\n", uid);
+        printf("Group id %d\n", gid);
+        printf("Process name %s\n", comm);
+
+        //extract user sent file descipter and flags
+        printf("File descripter: %d\n", args.fd);
+        printf("Flags %d\n", args.flags);
+
+        printf("============= End of the process information.==================");
+        printf("\n");
+
+        printf("=============Start of the message header information.==================\n");
+        //extract user sent message header data
+        printf("[1]. User sent msg header address: %px \n", $msgh);
+
+        //validation before display sockaddr data
+        if((void *)$msg_name == (void *)0 || $name_len == 0){
+            printf("No address data present in msghdr.\n");
+        }else{
+            printf("[2]. Address of the pointer that point to sockaddr: %px \n", $msg_name);
+            printf("[3]. Socket Family: %d \n", $s_family);
+        }
+
+        // extract the vecterized input output data
+        if((void *)$iovec == (void *)0 || $iovlen == 0){
+            printf("No payload buffers found.\n");
+        }else{
+            printf("[4]. elements in vecterized input output array %d\n", $iovlen);
+            if($base_len > 0){
+                // If len is rejected during runtime, put size 8
+                printf("[5]. Payload size %d and Data: %r \n", $base_len, buf($base, $base_len));
+            }
+        }
+
+        // extract the msg control data
+        if($msg_ctrl_len > 0){
+            printf("[6]. Control Data Size: %d bytes\n", $msg_ctrl_len);
+            printf("[7]. Raw Control Buffer: %r\n", buf($msg_ctrl, $msg_ctrl_len));
+
+            // extract the first control message header 
+            $cmsg = (struct cmsghdr *)$msg_ctrl;    // compact data
+            
+            /* control message headers memory layout
+            |==========================================|
+            |+++++++++++++ First header +++++++++++++++|
+            |------------------------------------------|
+            | 1. size = 0x14 = 20 bytes                |
+            |       |- 1. cmsg_len = first 8 byte      |
+            |       |- 2. cmesg_level = second 4 byte  |
+            |       |- 3. cmesg_type = third 4 byte    |
+            |       |- 4. data = 4 bytes               |
+            | 2. Padding = 4 bytes                     |
+            |==========================================|
+            | 3. Total = 24 bytes                      |
+            |==========================================|
+            |                                          |
+            |==========================================|
+            |++++++++++++ Second header +++++++++++++++|
+            |------------------------------------------|
+            | 1. size = 0x24 = 36 bytes                |
+            |       |- 1. cmsg_len = first 8 byte      |
+            |       |- 2. cmesg_level = second 4 byte  |
+            |       |- 3. cmesg_type = third 4 byte    |
+            |       |- 4. data = 20 bytes              |
+            | 2. Padding = 4 bytes                     |
+            |==========================================|
+            | 3. Total = 40 bytes                      |
+            |==========================================|
+            |                                          |
+            |==========================================|
+            |+++++++++++++ Third header +++++++++++++++|
+            |------------------------------------------|
+            | 1. size = 0x14 = 20 bytes                |
+            |       |- 1. cmsg_len = first 8 byte      |
+            |       |- 2. cmesg_level = second 4 byte  |
+            |       |- 3. cmesg_type = third 4 byte    |
+            |       |- 4. data = 4 bytes               |
+            | 2. Padding = 4 bytes                     |
+            |==========================================|
+            | 3. Total = 24 bytes                      |
+            |==========================================|
+
+            Total size = 24 + 40 + 24 = 88 bytes
+            */
+
+            $offset = (uint64)0;
+            unroll(3){
+                
+
+                //cmesg_len
+                $cmsg_len = buf($cmsg, 8);
+                printf("Control message header size: %r\n", $cmsg_len);
+
+                
+            }
+
+        }
+
+        // extract the msg flags
+        printf("[8]. Message flags: %d\n", $msg_flags);
+
+        printf("============= End of the message header information.==================");
+        printf("\n");
+
+    }
+}
+
+END {
+    printf("Closing the trace sendmsg syscall...\n");
+}
