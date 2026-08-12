@@ -41,7 +41,7 @@ tracepoint:syscalls:sys_enter_sendmsg{
     if(comm == "python3"){
 
         // display the process information.
-        printf("=============Start of the process information.==================\n");
+        printf("\n\n=============Start of the process information.==================\n");
         printf("Process id %d\n", pid);
         printf("Thread id %d\n", tid);
         printf("User id %d\n", uid);
@@ -130,13 +130,55 @@ tracepoint:syscalls:sys_enter_sendmsg{
             */
 
             $offset = (uint64)0;
+            $padding = (uint64)4; // NOTICE: hardcoded and this will be break on other examples.
             unroll(3){
-                
+
+                //for debug
+                //printf("Offset: %d\n", $offset);
 
                 //cmesg_len
-                $cmsg_len = buf($cmsg, 8);
-                printf("Control message header size: %r\n", $cmsg_len);
+                $raw_pointer = (uint64 *)$cmsg + $offset; // pointer arithmetic
+                $cmsg_len = *(uint64 *)$raw_pointer; // extract the cmsg len from pointer
 
+                $raw_len_type = (uint64 *)$raw_pointer + 1; // points to next 8 byte(level+type)
+                
+                $upper_half = *(uint64 *)$raw_len_type >> 32;   // control message type(little endian)
+                $lower_half = *(uint64 *)$raw_len_type & 0xffffffff;    // control message level(little endian)
+
+                $raw_data = (uint64 *)$raw_pointer+2;   // points to data starting point
+                $cmsg_data = buf($raw_data, ($cmsg_len - sizeof(struct cmsghdr))); // extracting the control message data
+
+                printf("\n========= Start of the control message header =========\n");
+
+                printf("Control message length: %d\n", $cmsg_len);
+                printf("Control message level: %d\n", $lower_half);
+                printf("Control message type: %d\n", $upper_half);
+                printf("Control message data: %r \n", $cmsg_data);
+                
+                printf("========= End of the control message header =========\n");
+                /*
+                    Execution:
+                        1. first iteration
+                            offset:
+                                - start = 0
+                                - end = 24
+    
+                        2. second iteration
+                            offset:
+                                - start = 24
+                                - end = 64
+                        
+                        3. third iteration
+                            offset:
+                                - start = 64
+                                - end = 88
+                */
+
+                $offset = ((($offset*8) + $cmsg_len + $padding)/8);
+                /*
+                    0 + 20 + 4 = 24 / 8 = 3
+                    24 + 36 + 4 = 64 / 8 = 8  
+                */
                 
             }
 
@@ -152,5 +194,54 @@ tracepoint:syscalls:sys_enter_sendmsg{
 }
 
 END {
-    printf("Closing the trace sendmsg syscall...\n");
+    printf("\nClosing the trace sendmsg syscall...\n");
 }
+
+/*
+    Output example:
+
+Attaching 3 probes...
+Starting the trace sendmsg syscall...
+
+
+=============Start of the process information.==================
+Process id 2476
+Thread id 2476
+User id 1000
+Group id 1000
+Process name python3
+File descripter: 5
+Flags 32768
+============= End of the process information.==================
+=============Start of the message header information.==================
+[1]. User sent msg header address: 0x7ffe4807f280x 
+No address data present in msghdr.
+[4]. elements in vecterized input output array 1
+[5]. Payload size 8 and Data: AAAA\x7fELF 
+[6]. Control Data Size: 88 bytes
+[7]. Raw Control Buffer: \x14\x00\x00\x00\x00\x00\x00\x00\x17\x01\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00$\x00\x00\x00\x00\x00\x00\x00\x17\x01\x00\x00\x02\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x14\x00\x00\x00\x00\x00\x00\x00\x17\x01\x00\x00\x04\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00
+
+========= Start of the control message header =========
+Control message length: 20
+Control message level: 279
+Control message type: 3
+Control message data: \x00\x00\x00\x00 
+========= End of the control message header =========
+
+========= Start of the control message header =========
+Control message length: 36
+Control message level: 279
+Control message type: 2
+Control message data: \x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00 
+========= End of the control message header =========
+
+========= Start of the control message header =========
+Control message length: 20
+Control message level: 279
+Control message type: 4
+Control message data: \x08\x00\x00\x00 
+========= End of the control message header =========
+[8]. Message flags: 0
+============= End of the message header information.==================
+
+*/
