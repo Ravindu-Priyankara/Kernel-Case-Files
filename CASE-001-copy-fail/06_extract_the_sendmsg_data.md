@@ -41,6 +41,8 @@
                     - defined in `include/linux/socket.h`
                 - type -> 3 -> IP_HDRINCL
                     - defined in `include/uapi/linux/in.h`
+                - STATUS
+                    - `[INFERRED]`
 
 
     - 2nd control message data
@@ -57,6 +59,8 @@
                     - defined in `include/linux/socket.h`
                 - type -> 2 -> IP_TTL
                     - defined in `include/uapi/linux/in.h`
+                - STATUS
+                    - `[INFERRED]`
 
     - 3rd control message data
         - in script we saw this
@@ -72,6 +76,8 @@
                     - defined in `include/linux/socket.h`
                 - type -> 4 -> IP_OPTIONS
                     - defined in `include/uapi/linux/in.h`
+                - STATUS
+                    - `[INFERRED]`
 
     - flags
         - decimal value = 32768
