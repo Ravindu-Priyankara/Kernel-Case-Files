@@ -4,7 +4,7 @@
     - When calling the socket syscall with AF_ALG, it loads the af_alg kernel module.
 
 - TEST
-    - One terminal: run socket_caller
+    - One terminal: run sys_passpayload/socket_caller
     - Second terminal, use the crash utility to analyse that socket.
 
 - RESULT
