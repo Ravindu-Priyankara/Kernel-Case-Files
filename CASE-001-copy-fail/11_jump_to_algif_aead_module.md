@@ -35,7 +35,7 @@ struct alg_sock {
 ```
 - 
     - 
-        - We can't display alg_sock because it's a kernel internal structure and not compiled into vmlinux. Therefore, the crash utility does not identify alg_sock.
+        - We can't display alg_sock because vmlinux hasn't debug info about it. Therefore, the crash utility does not identify alg_sock.
 
         - Manually counting the bytes for `af_alg_type` struct.(we wanted struct => af_alg_type)
             - `struct sock sk` => 784 bytes(according to kernel 6.17)
@@ -45,7 +45,7 @@ struct alg_sock {
             - `const struct af_alg_type *type;` => 8 bytes(just pointer)
             - `void *private` => 8 bytes(just pointer)
 
-        - Totally we need to skip 800 bytes for reach `const struct af_alg_type *type;` pointer.(Keep more room; otherwise, this will fail all the time (I mean byte count).)
+        - Totally we need to skip 800 bytes for reach `const struct af_alg_type *type;` pointer.(Keep more room; otherwise, this will fail all the time because of padding(I mean byte count).)
 
 - RESULT
 <img src="./assets/af_alg_type.png" alt="af_alg type">
