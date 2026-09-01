@@ -155,7 +155,7 @@ static ssize_t algo(int file_fd, int counter, unsigned char *payload){
         return -1;
     }
 
-    int err = 0, i = 0, size = 0, max = 100, min = 10;
+    int err = 0, i = 0, size = 0, max = 100, min = 25; // min = rtattr+enckeylen(8 byte) + AES key(16 byte) = 24 bytes + 1 byte at least for HMAC key = total 25 bytes
     ssize_t retd = 0, splice_bytes = 0;
     fds fds;
     fd_init(&fds);
