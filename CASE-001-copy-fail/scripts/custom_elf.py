@@ -228,3 +228,9 @@ if __name__ == "__main__":
         sys.exit(1)
 
     main(sys.argv[1], sys.argv[2])
+
+'''
+Most of the time I'm use a manual method for this. 
+So thats why I generated this automated script via ChatGPT. 😁 
+it easy rather than explaining the manual method.
+'''
