@@ -3,6 +3,16 @@
 - CLAIM
     - We struggled to find the setkey function address because the code used container_of macros. So, in our case, we should use pointer subtraction to do that.
 
+**Follow the setkey path from the algif_aead module. Eventually, you will find this.**
+`include/crypto/aead.c`
+```c
+static inline struct aead_alg *crypto_aead_alg(struct crypto_aead *tfm)
+{
+	return container_of(crypto_aead_tfm(tfm)->__crt_alg,
+			    struct aead_alg, base);
+}
+```
+
 - TEST
     - run scripts/sys_passpayload/setkey
     - Analyse crypto_aead & aead_alg structs via crash utility
