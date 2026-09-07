@@ -1,0 +1,31 @@
+#!/usr/bin/env bpftrace
+
+#include <crypto/hash.h>
+#include <linux/types.h>
+
+BEGIN{
+    printf("Start tracing crypto_ahash_setkey kernel function!\n");
+}
+
+/*
+*   Goal:
+*       - Identify using_shash enable or disable
+*
+*   Importance of using_shash
+*       - If it enable setkey call `crypto_shash_setkey` function.
+*       - If it not enable that, it goes to another path.
+*/
+fentry:vmlinux:crypto_ahash_setkey{
+    $crypt_ahash = (struct crypto_ahash *)args->tfm;
+
+    if($crypt_ahash->using_shash){
+        printf("crypto_shash_setkey function will be trigger!\n");
+    }else{
+        printf("Not enable shash!\n");
+    }
+
+}
+
+END{
+    printf("Stop the tracing crypto_ahash_setkey kernel function!\n");
+}
