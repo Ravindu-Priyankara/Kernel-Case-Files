@@ -1,0 +1,119 @@
+#!/usr/bin/env bpftrace
+
+#include <crypto/hash.h>
+#include <linux/crypto.h>
+
+/*
+*   This program uses `kernel 6.17` internal struct offsets. So it will break on your kernel. Keep that in mind.
+*   This script is used to get the setkey address
+*   And we don't care about the color of the bridge, as long as it takes us across the river.
+*/
+
+BEGIN{
+	printf("Tracing the crypto_shash_setkey function... \n");
+}
+
+// Method: 01
+fentry:vmlinux:crypto_shash_setkey{
+
+    $shash = (struct crypto_shash *)args->tfm;
+    $crt_alg = (struct crypto_alg *)$shash->base.__crt_alg;
+
+    /*
+    * Offsets - According to 6.17.0-19 kernel
+    */
+    //  struct shash_alg {
+	//      int                        (*init)(struct shash_desc *); /*     0     8 */
+	//      int                        (*update)(struct shash_desc *, const u8  *, unsigned int); /*     8     8 */
+    //      int                        (*final)(struct shash_desc *, u8 *); /*    16     8 */
+	//      int                        (*finup)(struct shash_desc *, const u8  *, unsigned int, u8 *); /*    24     8 */
+	//      int                        (*digest)(struct shash_desc *, const u8  *, unsigned int, u8 *); /*    32     8 */
+	//      int                        (*export)(struct shash_desc *, void *); /*    40     8 */
+	//      int                        (*import)(struct shash_desc *, const void  *); /*    48     8 */
+	//      int                        (*export_core)(struct shash_desc *, void *); /*    56     8 */
+	//      /* --- cacheline 1 boundary (64 bytes) --- */
+	//      int                        (*import_core)(struct shash_desc *, const void  *); /*    64     8 */
+	//      int                        (*setkey)(struct crypto_shash *, const u8  *, unsigned int); /*    72     8 */
+	//      int                        (*init_tfm)(struct crypto_shash *); /*    80     8 */
+	//      void                       (*exit_tfm)(struct crypto_shash *); /*    88     8 */
+	//      int                        (*clone_tfm)(struct crypto_shash *, struct crypto_shash *); /*    96     8 */
+	//      unsigned int               descsize;             /*   104     4 */
+    //
+	//      /* XXX 4 bytes hole, try to pack */
+    //
+	//      union {
+	//	        struct {
+	//		        unsigned int digestsize;         /*   112     4 */
+	//		        unsigned int statesize;          /*   116     4 */
+	//		        struct crypto_alg base __attribute__((__aligned__(8))); /*   120   392 */  <= we are here
+    //
+	//	        	/* XXX last struct has 1 hole */
+	//	        } __attribute__((__aligned__(8))) __attribute__((__aligned__(8)));       /*   112   400 */
+	//	        struct hash_alg_common halg __attribute__((__aligned__(8))); /*   112   400 */
+	//      }  __attribute__((__aligned__(8)));               /*   112   400 */
+    //
+	//  /* size: 512, cachelines: 8, members: 15 */
+	//  /* sum members: 508, holes: 1, sum holes: 4 */
+	//  /* forced alignments: 1, forced holes: 1, sum forced holes: 4 */
+    //  } __attribute__((__aligned__(8)));
+
+    $setkey_ptr = (uint64)$crt_alg - 0x30;
+    $setkey_addr = *(uint64 *)$setkey_ptr;
+
+    printf("setkey function pointer address(method-01): %p (%s)\n", $setkey_addr, ksym($setkey_addr));
+
+}
+
+// Method 02
+
+/*
+*   disassembly of crypto_shash_setkey
+*
+*   Dump of assembler code for function crypto_shash_setkey:
+*       0xffffffff81b55be0 <+0>:	call   0xffffffff813d17f0 <__fentry__>
+*       0xffffffff81b55be5 <+5>:	push   rbp
+*       0xffffffff81b55be6 <+6>:	mov    rbp,rsp
+*       0xffffffff81b55be9 <+9>:	push   r12
+*       0xffffffff81b55beb <+11>:	mov    r12,QWORD PTR [rdi+0x20]
+*       0xffffffff81b55bef <+15>:	push   rbx
+*       0xffffffff81b55bf0 <+16>:	mov    rbx,rdi
+*       0xffffffff81b55bf3 <+19>:	mov    rax,QWORD PTR [r12-0x30]  <= This is what we needed
+*       0xffffffff81b55bf8 <+24>:	call   0xffffffff8263a880 <__x86_indirect_thunk_array>
+*       0xffffffff81b55bfd <+29>:	test   eax,eax
+*       0xffffffff81b55bff <+31>:	jne    0xffffffff81b55c14 <crypto_shash_setkey+52>
+*       0xffffffff81b55c01 <+33>:	and    DWORD PTR [rbx+0x4],0xfffffffe
+*       0xffffffff81b55c05 <+37>:	pop    rbx
+*       0xffffffff81b55c06 <+38>:	pop    r12
+*       0xffffffff81b55c08 <+40>:	pop    rbp
+*       0xffffffff81b55c09 <+41>:	xor    edx,edx
+*       0xffffffff81b55c0b <+43>:	xor    esi,esi
+*       0xffffffff81b55c0d <+45>:	xor    edi,edi
+*       0xffffffff81b55c0f <+47>:	jmp    0xffffffff8263b4b0 <__x86_return_thunk>
+*       0xffffffff81b55c14 <+52>:	cmp    QWORD PTR [r12-0x30],0xffffffff81b55030
+*       0xffffffff81b55c1d <+61>:	je     0xffffffff81b55c05 <crypto_shash_setkey+37>
+*       0xffffffff81b55c1f <+63>:	test   BYTE PTR [r12+0x21],0x40
+*       0xffffffff81b55c25 <+69>:	jne    0xffffffff81b55c05 <crypto_shash_setkey+37>
+*       0xffffffff81b55c27 <+71>:	or     DWORD PTR [rbx+0x4],0x1
+*       0xffffffff81b55c2b <+75>:	jmp    0xffffffff81b55c05 <crypto_shash_setkey+37>
+*  End of assembler dump.
+*
+*   - Look at this
+*       0xffffffff81b55bf3 <+19>:	mov    rax,QWORD PTR [r12-0x30]  <= This is what we needed
+*       0xffffffff81b55bf8 <+24>:	call   0xffffffff8263a880 <__x86_indirect_thunk_array>
+*   
+*   - rax holds the setkey address
+*       - offset = 24
+*       - c output
+*           - err = shash->setkey(tfm, key, keylen);
+*       - Thats why it to add indirect call
+* 
+*/
+kprobe:crypto_shash_setkey+24{
+    $setkey_addr = reg("ax"); // and r12 hold the crt_alg
+
+    printf("setkey function pointer address(method-02): %p (%s)\n", $setkey_addr, ksym($setkey_addr));
+}
+
+END{
+	printf("Closing the tracing crypto_shash_setkey function... \n");
+}
