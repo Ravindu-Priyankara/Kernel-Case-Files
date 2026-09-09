@@ -1,0 +1,213 @@
+#!/usr/bin/env bpftrace
+                                      
+
+BEGIN {}
+
+/*
+*   - Goal:
+*       - Monitor arguments.
+*   - Importance:
+*       - This is the last visible function in the kernel for setkey. 
+*           - (This is correct until I see the disassembly.😁 This is not the last visible function. There were a few more functions underneath that.)
+*       - So we need to monitor the arguments before the logical operation happens.
+*/
+fentry:vmlinux:__hmac_sha256_preparekey{
+
+    $istate = (struct sha256_block_state *)args->istate;
+    $istate_array = $istate->h;
+
+    $ostate = (struct sha256_block_state *)args->ostate;
+    $ostate_array = $ostate->h;
+
+    $key = args->raw_key;
+    $key_len = args->raw_key_len;
+
+    // Read-only value, interesting one, and let's see what's inside that.
+    $iv = (struct sha256_block_state *)args->iv;
+    $iv_array = $iv->h;
+
+    /*  manually extracted, 
+    *       - Reason
+    *           1. We knows the size of the array
+    *           2. it defined there
+    *               - include/crypto/sha2.h
+    *               - like this
+    *                   - #define SHA256_STATE_WORDS      8
+    *
+    *   Written by a caveman, but it runs in O(1) time.😂
+    */
+    $x = $istate_array;
+    printf("Istate:\t %d%d%d%d%d%d%d%d \n", $x[0],$x[1],$x[2],$x[3],$x[4],$x[5],$x[6],$x[7]);
+
+    $y = $ostate_array;
+    printf("Ostate:\t %d%d%d%d%d%d%d%d \n", $y[0],$y[1],$y[2],$y[3],$y[4],$y[5],$y[6],$y[7]);
+
+    $z = $iv_array;
+    printf("Iv:\t %d%d%d%d%d%d%d%d \n", $z[0],$z[1],$z[2],$z[3],$z[4],$z[5],$z[6],$z[7]);
+
+    // key extract as raw bytes
+    printf("RAW HMAC KEY: %r\n", buf($key, $key_len));
+
+    printf("Extracting derived_key (XOR) HMAC_IPAD_VALUE \n");
+}
+
+/*
+*   This will help when writing blog post
+*
+*   derived_key memory layout(zeroed)
+*
+*
+*   b       | 00000000 | 00000000 | 00000000 | 00000000 | 00000000 | 00000000 | 00000000 | 00000000 |
+*   w       |    0     |    0     |    0     |    0     |    0     |    0     |    0     |    0     |
+*
+*
+*   step 2:
+*       - copy the raw key to b
+*          - ex:
+*             key len = 16
+*
+*   b       | XXXXXXXX | XXXXXXXX | 00000000 | 00000000 | 00000000 | 00000000 | 00000000 | 00000000 |
+*   w       |    X     |    X     |    0     |    0     |    0     |    0     |    0     |    0     |
+*
+*   xor key kernel use = 0x3636363636363636 (first loop)
+*      - 11011000110110001101100011011000110110001101100011011000110110b
+*
+*   if our key has all zero
+*       11011000110110001101100011011000110110001101100011011000110110
+*       00000000000000000000000000000000000000000000000000000000000000
+*      ______________________________________________________________
+*      11011000110110001101100011011000110110001101100011011000110110
+*      ==============================================================
+*
+*   It gave the kernel  use xor key.
+*/
+
+/*
+*   Extracting xored key that first loop use
+*
+*   - Find best offset to put kprobe
+*
+*   Dump of assembler code for function __hmac_sha256_preparekey:
+*   0xffffffff81c53820 <+0>:	call   0xffffffff813d17f0 <__fentry__>
+*   0xffffffff81c53825 <+5>:	push   rbp
+*   0xffffffff81c53826 <+6>:	mov    r9,rdx
+*   0xffffffff81c53829 <+9>:	mov    rbp,rsp
+*   0xffffffff81c5382c <+12>:	push   r15
+*   0xffffffff81c5382e <+14>:	mov    r15,rdi
+*   0xffffffff81c53831 <+17>:	push   r14
+*   0xffffffff81c53833 <+19>:	mov    r14,r8
+*   0xffffffff81c53836 <+22>:	push   r13
+*   0xffffffff81c53838 <+24>:	mov    r13,rsi
+*   0xffffffff81c5383b <+27>:	mov    rsi,rcx
+*   0xffffffff81c5383e <+30>:	mov    ecx,0x8
+*   0xffffffff81c53843 <+35>:	push   r12
+*   0xffffffff81c53845 <+37>:	lea    r12,[rbp-0x70]
+*   0xffffffff81c53849 <+41>:	push   rbx
+*   0xffffffff81c5384a <+42>:	mov    rdi,r12
+*   0xffffffff81c5384d <+45>:	sub    rsp,0x50
+*   0xffffffff81c53851 <+49>:	mov    rax,QWORD PTR gs:[rip+0x25457af]        # 0xffffffff84199008 <__stack_chk_guard>
+*   0xffffffff81c53859 <+57>:	mov    QWORD PTR [rbp-0x30],rax
+*   0xffffffff81c5385d <+61>:	xor    eax,eax
+*   0xffffffff81c5385f <+63>:	rep stos QWORD PTR es:[rdi],rax
+*   0xffffffff81c53862 <+66>:	cmp    rsi,0x40     ; check raw_key_len > SHA256_BLOCK_SIZE
+*   0xffffffff81c53866 <+70>:	ja     0xffffffff81c53981 <__hmac_sha256_preparekey+353>
+*   0xffffffff81c5386c <+76>:	mov    rdx,rsi
+*   0xffffffff81c5386f <+79>:	mov    rdi,r12 ; r12 = derived_key.b
+*   0xffffffff81c53872 <+82>:	mov    rsi,r9
+*   0xffffffff81c53875 <+85>:	call   0xffffffff82628b40 <__pi_memcpy>
+*   0xffffffff81c5387a <+90>:	movabs rdx,0x3636363636363636   ; rdx = REPEAT_BYTE(HMAC_IPAD_VALUE), #define HMAC_IPAD_VALUE 0x36
+*   0xffffffff81c53884 <+100>:	xor    ebx,ebx  ; Make zero for take as loop counter.
+*   0xffffffff81c53886 <+102>:	cmp    rbx,0x8  ; Bound check, ARRAY_SIZE(derived_key.w)
+*   0xffffffff81c5388a <+106>:	jae    0xffffffff81c539fa <__hmac_sha256_preparekey+474>
+*   0xffffffff81c53890 <+112>:	mov    rax,QWORD PTR [r12+rbx*8]    ; rax = byte that wanted to xored, [r12+rbx*8] = pointer arithmetic to get next byte
+*   0xffffffff81c53894 <+116>:	cmp    rbx,0x8  ; Bound check, ARRAY_SIZE(derived_key.w)
+*   0xffffffff81c53898 <+120>:	jae    0xffffffff81c539d4 <__hmac_sha256_preparekey+436>
+*   0xffffffff81c5389e <+126>:	xor    rax,rdx
+*   0xffffffff81c538a1 <+129>:	mov    QWORD PTR [r12+rbx*8],rax    ;[r12+rbx*8] = save XORed value
+*   0xffffffff81c538a5 <+133>:	add    rbx,0x1  ; increment the loop counter 
+*   0xffffffff81c538a9 <+137>:	cmp    rbx,0x8  ; Bound check, ARRAY_SIZE(derived_key.w)
+*   0xffffffff81c538ad <+141>:	jne    0xffffffff81c53886 <__hmac_sha256_preparekey+102> if not equal loop will be continue.
+*
+*   - Best point to hook:
+*       - __hmac_sha256_preparekey:+129
+*       - reason:
+*           - After XORed we can get that xored output.
+*           - Tradeoff: will be show few iterations.
+*/
+kprobe:__hmac_sha256_preparekey+129{
+    $xored = reg("ax");
+    $counter = reg("bx");
+
+    printf("XORed output(1st loop)(%d, iteration): 0x%02x\n", $counter, $xored);
+}
+
+
+/*
+*   Extracting the second xor loop after key
+*
+*   - Kernel side xor key they use
+*
+*       - HMAC_IPAD_VALUE = 0x36
+*           - 110110b
+*       - HMAC_OPAD_VALUE = 0x5c
+*           - 1011100b
+*
+*       0110110b
+*       011100b
+*       ________
+*       1101010b    => 0x6a
+*       ========
+*
+*
+*   Calculate the xor offset to extract key
+*
+*   0xffffffff81c538da <+186>:	movabs r15,0x6a6a6a6a6a6a6a6a
+*   0xffffffff81c538e4 <+196>:	call   0xffffffff8263cc58 <__SCT__sha256_blocks_x86>
+*   0xffffffff81c538e9 <+201>:	cmp    rbx,0x8
+*   0xffffffff81c538ed <+205>:	jae    0xffffffff81c539c0 <__hmac_sha256_preparekey+416>
+*   0xffffffff81c538f3 <+211>:	mov    rax,QWORD PTR [r12+rbx*8]
+*   0xffffffff81c538f7 <+215>:	cmp    rbx,0x8
+*   0xffffffff81c538fb <+219>:	jae    0xffffffff81c539a4 <__hmac_sha256_preparekey+388>
+*   0xffffffff81c53901 <+225>:	xor    rax,r15
+*   0xffffffff81c53904 <+228>:	mov    QWORD PTR [r12+rbx*8],rax 
+*   0xffffffff81c53908 <+232>:	add    rbx,0x1
+*   0xffffffff81c5390c <+236>:	cmp    rbx,0x8
+*   0xffffffff81c53910 <+240>:	jne    0xffffffff81c538e9 <__hmac_sha256_preparekey+201>
+*
+*   - Offset we target
+*       - __hmac_sha256_preparekey:+228
+*/ 
+kprobe:__hmac_sha256_preparekey+228{
+    $xored = reg("ax");
+    $counter = reg("bx");
+
+    printf("XORed output(2nd loop)(%d, iteration): 0x%02x\n", $counter, $xored);
+}
+
+END{}
+
+/*
+*   Example Output:
+*
+*       Istate:	 00000000 
+*       Ostate:	 00000000 
+*       Iv:	 1779033703-11508330191013904242-15214865341359893119-16941443725287346351541459225 
+*       RAW HMAC KEY: \x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02\x02
+*       Extracting derived_key (XOR) HMAC_IPAD_VALUE 
+*       XORed output(1st loop)(0, iteration): 0x34343434
+*       XORed output(1st loop)(1, iteration): 0x34343434
+*       XORed output(1st loop)(2, iteration): 0x36363636
+*       XORed output(1st loop)(3, iteration): 0x36363636
+*       XORed output(1st loop)(4, iteration): 0x36363636
+*       XORed output(1st loop)(5, iteration): 0x36363636
+*       XORed output(1st loop)(6, iteration): 0x36363636
+*       XORed output(1st loop)(7, iteration): 0x36363636
+*       XORed output(2nd loop)(0, iteration): 0x5e5e5e5e
+*       XORed output(2nd loop)(1, iteration): 0x5e5e5e5e
+*       XORed output(2nd loop)(2, iteration): 0x5c5c5c5c
+*       XORed output(2nd loop)(3, iteration): 0x5c5c5c5c
+*       XORed output(2nd loop)(4, iteration): 0x5c5c5c5c
+*       XORed output(2nd loop)(5, iteration): 0x5c5c5c5c
+*       XORed output(2nd loop)(6, iteration): 0x5c5c5c5c
+*       XORed output(2nd loop)(7, iteration): 0x5c5c5c5c
+*/
