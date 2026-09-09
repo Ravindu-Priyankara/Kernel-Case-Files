@@ -1,0 +1,128 @@
+#!/usr/bin/env bpftrace
+
+
+BEGIN{}
+
+/*
+*   Hook:
+*
+*           0xffffffff81c538b2 <+146>:	mov    rdi,r15 => rdi = struct sha256_block_state *istate
+*           0xffffffff81c538b5 <+149>:	mov    edx,0x1 <= put hook there and steal the pointer
+*           0xffffffff81c538ba <+154>:	mov    rsi,r12
+*           0xffffffff81c538bd <+157>:	xor    ebx,ebx
+*           0xffffffff81c538bf <+159>:	mov    QWORD PTR [r15],rax
+*           0xffffffff81c538c2 <+162>:	mov    rax,QWORD PTR [r14+0x8]
+*           0xffffffff81c538c6 <+166>:	mov    QWORD PTR [r15+0x8],rax
+*           0xffffffff81c538ca <+170>:	mov    rax,QWORD PTR [r14+0x10]
+*           0xffffffff81c538ce <+174>:	mov    QWORD PTR [r15+0x10],rax
+*           0xffffffff81c538d2 <+178>:	mov    rax,QWORD PTR [r14+0x18]
+*           0xffffffff81c538d6 <+182>:	mov    QWORD PTR [r15+0x18],rax
+*           0xffffffff81c538da <+186>:	movabs r15,0x6a6a6a6a6a6a6a6a
+*           0xffffffff81c538e4 <+196>:	call   0xffffffff8263cc58 <__SCT__sha256_blocks_x86>
+*/
+kprobe:__hmac_sha256_preparekey+149{
+
+    $istate = (struct sha256_block_state *)reg("di");
+    $h_ptr = $istate->h;
+
+    /*
+    *   CRITICAL STEP:
+    *       - we need to save this pointer to extract the state later.
+    */
+    @global_istate = $istate; 
+
+    printf("Istate: %p\n", $istate);
+    printf("Before istate->h: %r\n", buf($h_ptr, 8));
+
+}
+
+/*
+*   Hook:
+*       - same as before.
+*
+*       0xffffffff81c53915 <+245>:	mov    rdi,r13
+*       0xffffffff81c53918 <+248>:	mov    edx,0x1  <= hook
+*       0xffffffff81c5391d <+253>:	mov    rsi,r12
+*       0xffffffff81c53920 <+256>:	mov    QWORD PTR [r13+0x0],rax
+*       0xffffffff81c53924 <+260>:	mov    rax,QWORD PTR [r14+0x8]
+*       0xffffffff81c53928 <+264>:	mov    QWORD PTR [r13+0x8],rax
+*       0xffffffff81c5392c <+268>:	mov    rax,QWORD PTR [r14+0x10]
+*       0xffffffff81c53930 <+272>:	mov    QWORD PTR [r13+0x10],rax
+*       0xffffffff81c53934 <+276>:	mov    rax,QWORD PTR [r14+0x18]
+*       0xffffffff81c53938 <+280>:	mov    QWORD PTR [r13+0x18],rax
+*       0xffffffff81c5393c <+284>:	call   0xffffffff8263cc58 <__SCT__sha256_blocks_x86>
+*/
+kprobe:__hmac_sha256_preparekey+248{
+
+    $ostate = (struct sha256_block_state *)reg("di");
+    $h_ptr = $ostate->h;
+
+    /*
+    *   CRITICAL STEP:
+    *       - we need to save this pointer to extract the state later.
+    */
+    @global_ostate = $ostate;
+
+    printf("Ostate: %p\n", $ostate);
+    printf("Before ostate->h: %r\n", buf($h_ptr, 8));
+
+}
+
+/*
+*   Hook
+*
+*       0xffffffff81c53941 <+289>:	mov    rdi,r12 <= Hook
+*       0xffffffff81c53944 <+292>:	mov    rcx,rbx
+*       0xffffffff81c53947 <+295>:	xor    eax,eax
+*
+*   - reason:
+*       - After sha-256 compression display the both states.
+*/
+kprobe:__hmac_sha256_preparekey+289{
+    $istate = @global_istate;
+    $is_h_ptr = $istate->h;
+
+    $ostate = @global_ostate;
+    $os_h_ptr = $ostate->h;
+
+    printf("Inner state: %p\n", $istate);
+    printf("After istate->h: %r\n", buf($is_h_ptr, 8));
+
+    printf("Outer state: %p\n", $ostate);
+    printf("After ostate->h: %r\n", buf($os_h_ptr, 8));
+}
+
+
+END{
+    clear(@global_istate);
+    clear(@global_ostate);
+}
+
+/*
+*   Epilogue:
+*       - we provided raw HMAC key and it does these two thing
+*           1. Inner state
+*               - XOR ipad (0x36)
+*               - SHA-256 compression (sha256_block_generic function)
+*              - ISTATE (inner state)
+*
+*           2. Outer state
+*               - XOR opad (0x5c)
+*               - SHA-256 compression (sha256_block_generic function)
+*               - OSTATE (outer state)
+*
+*       - In the future, we can see these stages' usage.
+*/
+
+/*
+*   Example Output:
+*
+*   Istate: 0xffff888100a701a8
+*   Before istate->h: \x00\x00\x00\x00\x00\x00\x00\x00
+*   Ostate: 0xffff888100a701c8
+*   Before ostate->h: \x00\x00\x00\x00\x00\x00\x00\x00
+*   Inner state: 0xffff888100a701a8
+*   After istate->h: 2T7\xf3\xb7\xc7\xa2\xe9
+*   Outer state: 0xffff888100a701c8
+*   After ostate->h: 8\N\x10\xdaB\xd6\x1c
+*/
