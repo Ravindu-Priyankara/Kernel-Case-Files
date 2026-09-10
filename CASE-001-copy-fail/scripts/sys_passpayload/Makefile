@@ -1,4 +1,4 @@
-all: socket_caller bind setkey
+all: socket_caller bind setkey authsize
 
 socket_caller: socket_caller.c
 	gcc -fsanitize=address -g socket_caller.c -o socket_caller
