@@ -9,5 +9,8 @@ bind: bind_caller.c
 setkey: setkey.c 
 	gcc -fsanitize=address,undefined -fno-omit-frame-pointer -g setkey.c -o setkey
 
+authsize: authsize.c
+	gcc -fsanitize=address,undefined -fno-omit-frame-pointer -g authsize.c -o authsize
+
 clean:
-	rm -f socket_caller bind_caller setkey
+	rm -f socket_caller bind_caller setkey authsize
