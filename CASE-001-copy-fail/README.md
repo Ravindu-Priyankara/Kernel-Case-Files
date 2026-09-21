@@ -103,4 +103,4 @@ Some parts of the investigation are still being analyzed.
 
 ## Related Research
 
-- CASE-002-Obliviate
+- [CASE-002-Obliviate](../CASE-002-Obliviate/README.md)
