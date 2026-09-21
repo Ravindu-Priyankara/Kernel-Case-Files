@@ -17,6 +17,7 @@
 
 1. [Extracting the hmac key](02_extracting_the_hmac_key.md)
 2. [Understanding the keys stored in memory](03_understanding_the_keys_stored_in_memory.md)
+3. [Change the hmac keys](04_changing_the_hmac_key.md)
 
 ### 3. defensive side
 
