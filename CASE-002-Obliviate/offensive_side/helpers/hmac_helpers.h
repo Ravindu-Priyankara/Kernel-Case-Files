@@ -66,7 +66,7 @@ static int extract_key_prehandler(struct kprobe *kps, struct pt_regs *regs){
     if(ret != 0)
         return 0;
 
-    pr_info("Raw Key: %*ph \n", (int)raw_key_len, local_buffer);
+    pr_info("Raw HMAC Key: %*ph \n", (int)raw_key_len, local_buffer);
     // wipe out the key
     memzero_explicit(local_buffer, raw_key_len);
 

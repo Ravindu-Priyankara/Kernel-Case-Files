@@ -11,7 +11,11 @@
 
 ### 1. Introduction
 
+1. [Importance of the __hmac_sha256_preparekey function](01_importance_of_hmac_sha256_preparekey_func.md)
+
 ### 2. Offensive side
+
+1. [Extracting the hmac key](02_extracting_the_hmac_key.md)
 
 ### 3. defensive side
 
