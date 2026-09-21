@@ -16,6 +16,7 @@
 ### 2. Offensive side
 
 1. [Extracting the hmac key](02_extracting_the_hmac_key.md)
+2. [Understanding the keys stored in memory](03_understanding_the_keys_stored_in_memory.md)
 
 ### 3. defensive side
 
@@ -31,10 +32,8 @@
 4. readelf
 5. objdump
 6. bpftrace
-7. xxd
-8. dd
-9. custom c programs
-10. python scripts
+7. addr2line
+8. custom c programs
 
 ## Current Status
 
