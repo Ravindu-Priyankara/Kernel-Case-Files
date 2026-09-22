@@ -21,6 +21,7 @@
 4. [Expose the hmac states](05_expose_the_hmac_state.md)
 5. [AES and HMAC key memory layout](06_aes_and_hmac_key_memory_layout.md)
 6. [AES key extraction](07_extracting_the_aes_key.md)
+7. [AES key changing](08_changing_the_aes_key.md)
 
 ### 3. defensive side
 
