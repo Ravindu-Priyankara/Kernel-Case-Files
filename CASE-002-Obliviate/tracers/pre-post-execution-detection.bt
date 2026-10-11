@@ -16,7 +16,7 @@
 
 // start => sys_init_module || sys_finit_module
 
-BEGIN { printf("\nStart the tracing `kernel module` pre ad post execution\n");}
+BEGIN { printf("\nStart the tracing `kernel module` pre and post execution\n");}
 
 // Extract the fd that send finit_module
 tracepoint:syscalls:sys_enter_finit_module{

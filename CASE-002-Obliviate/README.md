@@ -13,7 +13,7 @@
 
 1. [Importance of the __hmac_sha256_preparekey function](01_importance_of_hmac_sha256_preparekey_func.md)
 
-### 2. Offensive side
+### 2. Offensive kernel module side
 
 1. [Extracting the hmac key](02_extracting_the_hmac_key.md)
 2. [Understanding the keys stored in memory](03_understanding_the_keys_stored_in_memory.md)
@@ -23,7 +23,7 @@
 6. [AES key extraction](07_extracting_the_aes_key.md)
 7. [AES key changing](08_changing_the_aes_key.md)
 
-### 3. defensive side
+### 3. Tracer
 
 ## assets/
 
