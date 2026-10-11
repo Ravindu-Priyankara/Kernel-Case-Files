@@ -4,7 +4,11 @@
 
 ## Investigation Goals
 
-- Understanding these concepts:
+- Reveal AES key
+- Reveal HMAC key
+- Change AES key
+- CHANGE HMAC key
+- Reveal STATES
     
 
 ## Investigation Notes
@@ -22,8 +26,17 @@
 5. [AES and HMAC key memory layout](06_aes_and_hmac_key_memory_layout.md)
 6. [AES key extraction](07_extracting_the_aes_key.md)
 7. [AES key changing](08_changing_the_aes_key.md)
+8. [Change the AES key](08_changing_the_aes_key.md)
+9. [LKM loading machanisms](09_LKM_loading_mechanisms.md)
 
 ### 3. Tracer
+
+1. [Visibility Layer](10_visibility_layers.md
+)
+
+### Kernel Module
+
+1. [Obliviate](offensive_side/obliviate.c)
 
 ## assets/
 
@@ -40,8 +53,12 @@
 7. addr2line
 8. custom c programs
 
-## Current Status
+## Writeup
+    - PENDING
 
+## Current Status
+- STATUS
+    - `[COMPLETE]`
 
 
 ## Related Research
