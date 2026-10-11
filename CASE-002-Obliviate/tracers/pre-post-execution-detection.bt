@@ -1,0 +1,257 @@
+#!/usr/bin/env bpftrace
+
+#include <linux/fs.h>
+#include <linux/kernel_read_file.h>
+#include <linux/module.h>
+#include <linux/cred.h>
+#include <linux/path.h>
+#include <linux/dcache.h>
+#include <linux/module.h>
+#include <linux/security.h>
+
+/*
+*   Goal:
+*       - Detect and log evidence before execution. (That's the scope.)
+*/
+
+// start => sys_init_module || sys_finit_module
+
+BEGIN { printf("\nStart the tracing `kernel module` pre ad post execution\n");}
+
+// Extract the fd that send finit_module
+tracepoint:syscalls:sys_enter_finit_module{
+    $fd = args->fd;
+
+    printf("\nFd that send through finit_module syscall: %d \n", $fd);
+}
+
+/*
+*   this runs before 'security_kernel_read_file`
+*   But we need to be careful because this gives unfiltered output, 
+*   so before use, validate it first.
+*/
+fentry:vmlinux:kernel_read_file{
+    $file = (struct file *)args->file;
+    $id = args->id;
+
+    if($file == 0){ return ;}
+
+    if($id == READING_MODULE){
+        // extract file operation related data
+        $f_op = (struct file_operations *)$file->f_op;
+
+        $module = $f_op->owner;
+
+        // Process information
+        printf("Process information!\n");
+        printf("Pid: %d\n", pid);
+        printf("Comm: %s\n", comm);
+
+        printf("\nExtracting the module information \n");
+        //extract the states
+        $state = $module->state;
+        if($state == MODULE_STATE_LIVE){ printf("Module state: MODULE_STATE_LIVE\n"); }
+        if($state == MODULE_STATE_COMING) { printf("Module state: MODULE_STATE_COMING\n"); }
+        if($state == MODULE_STATE_GOING) { printf("Module state: MODULE_STATE_GOING\n"); }
+        if($state == MODULE_STATE_UNFORMED) { printf("Module state: MODULE_STATE_UNFORMED\n"); }
+
+        //lets move to the inode
+        printf("\nExtract the inode informations\n");
+        $inode = (struct inode *)$file->f_inode;
+
+        printf("Mode: %o\n", $inode->i_mode);
+        $mode = $inode->i_mode;
+        if($mode & 0x8000){
+            printf("There was a regular file(S_IFREG)\n");
+        }
+
+        $perm = $mode & ~(0x8000);
+        printf("File permission: %o \n",$perm);
+
+        $uid = $inode->i_uid.val;
+        $gid = $inode->i_gid.val;
+        $flags = $inode->i_flags;
+
+        printf("User id: %d \n", $uid);
+        printf("Group id: %d \n", $gid);
+        printf("Flags: %ld \n", $flags);
+
+        // file flags
+        printf("\nFile flags: %o \n", $file->f_flags); //set close_on_exec
+        printf("IOCB flags: %ld \n", $file->f_iocb_flags);
+
+        // extract cred struct information
+        $cred = (struct cred *)$file->f_cred;
+        printf("\nExtract the security context of a task\n");
+
+        printf("User permission: %s \n", $cred->uid.val == 0 ? "root":"Normal-user");// author lives in the Stone Age
+        // no more
+
+        // lets go to path struct
+        $path = $file->f_path;
+        $dentry = (struct dentry *)$path.dentry;
+
+        printf("\nExtract the file information!\n");
+        printf("File name: %s \n", str($dentry->d_name.name));
+        printf("Parent folder name: %s/ \n", str($dentry->d_parent->d_name.name));
+
+        // Didn't touch buffer at all.
+    }
+
+}
+
+/*
+*   if you need to investigate the ELF program before it is fully functioning, 
+*   use this hook, but for heavy tasks, consider switching to the userland approach.
+*
+*   hook =>  security_kernel_post_read_file func or use its lsm hook(enforcement).
+*/
+
+
+fentry:vmlinux:security_kernel_load_data{
+    $id = args->id;
+
+    if($id == LOADING_MODULE){
+        printf("\nTry to load module via init_module syscall..\n"); 
+    }
+}
+
+// too late when it comes to this function. 
+fentry:vmlinux:do_init_module {
+    $module = (struct module *)args->mod;
+
+    // Before module run, lets extract the module informations.
+    printf("\nExtract the module informations before it run!\n");
+    $state = $module->state;
+    if($state == MODULE_STATE_LIVE){ printf("Module state: MODULE_STATE_LIVE\n"); }
+    if($state == MODULE_STATE_COMING) { printf("Module state: MODULE_STATE_COMING\n"); }
+    if($state == MODULE_STATE_GOING) { printf("Module state: MODULE_STATE_GOING\n"); }
+    if($state == MODULE_STATE_UNFORMED) { printf("Module state: MODULE_STATE_UNFORMED\n"); }
+
+    printf("Module name: %s \n", $module->name);
+    printf("Module version: %s \n", str($module->version));
+    printf("Module srcversion: %s \n", str($module->srcversion));
+}
+
+// start to trace module exit
+tracepoint:syscalls:sys_enter_delete_module{
+    printf("\nModule try to unload\n");
+
+    $name = args->name_user;
+    printf("Module name: %s \n", str($name));
+}
+
+/*
+*   Fragile across kernel versions
+*
+*      0xffffffff815296d0 <+0>:	call   0xffffffff813d17f0 <__fentry__>
+*      0xffffffff815296d5 <+5>:	push   rbp
+*      0xffffffff815296d6 <+6>:	mov    rbp,rsp
+*      0xffffffff815296d9 <+9>:	sub    rsp,0x8
+*      0xffffffff815296dd <+13>:	mov    QWORD PTR [rbp-0x8],rdi
+*      0xffffffff815296e1 <+17>:	call   0xffffffff8260b840 <strlen>
+*      0xffffffff815296e6 <+22>:	mov    rdi,QWORD PTR [rbp-0x8]
+*      0xffffffff815296ea <+26>:	xor    edx,edx
+*      0xffffffff815296ec <+28>:	mov    rsi,rax
+*      0xffffffff815296ef <+31>:	call   0xffffffff81529200 <find_module_all>
+*      0xffffffff815296f4 <+36>:	leave <= sweetspot before return
+*      0xffffffff815296f5 <+37>:	xor    edx,edx
+*      0xffffffff815296f7 <+39>:	xor    esi,esi
+*      0xffffffff815296f9 <+41>:	xor    edi,edi
+*      0xffffffff815296fb <+43>:	jmp    0xffffffff8263b4b0 <__x86_return_thunk>
+*
+*   Don't ask why kretprobe or fexit is not used..
+*/
+kprobe:find_module+31{
+    $module = (struct module *)reg("ax");
+
+    printf("\nExtract the module informations before it unload!\n");
+    $state = $module->state;
+    if($state == MODULE_STATE_LIVE){ printf("Module state: MODULE_STATE_LIVE\n"); }
+    if($state == MODULE_STATE_COMING) { printf("Module state: MODULE_STATE_COMING\n"); }
+    if($state == MODULE_STATE_GOING) { printf("Module state: MODULE_STATE_GOING\n"); }
+    if($state == MODULE_STATE_UNFORMED) { printf("Module state: MODULE_STATE_UNFORMED\n"); }
+}
+// disable this method if you don't need
+
+/*
+*   | After loading the module |
+*/
+
+// register_kprobes also internally called register_kprobe, so thats why this is good enough here.
+fentry:vmlinux:register_kprobe{
+    $probe = (struct kprobe *)args->p;
+    $symbol_name = $probe->symbol_name;
+
+    if(str($symbol_name) == "__hmac_sha256_preparekey"){
+        printf("\nSomeone tried to register a probe to the crypto internal function called __hmac_sha256_preparekey\n");
+        printf("It's pid is %d, and it's comm is %s \n", pid, comm);
+    }
+}
+
+// a shot in the dark
+fentry:vmlinux:kallsyms_lookup_name{
+    $name = args->name;
+
+    if(str($name) == "copy_to_kernel_nofault"){
+        printf("\nSomeone try to find 'copy_to_kernel_nofault' function address!\n");
+        printf("Its pid: %d and comm: %s \n", pid, comm);
+    }
+}
+
+// very noicy one, if you need enable it
+/*fentry:vmlinux:copy_from_kernel_nofault{
+    $src = args->src;
+    $size = args->size;
+
+    printf("\nExtracting the information, when someone try to copy kernel data.\n");
+    printf("Data they try to copy: %r \n", buf($src, $size));
+}*/
+
+END { printf("\nClose the tracing `kernel module` pre and post execution\n");}
+
+/*
+*   - Example output:
+*
+Start the tracing `kernel module` pre ad post execution
+
+Fd that send through finit_module syscall: 3 
+Process information!
+Pid: 2435
+Comm: insmod
+
+Extracting the module information 
+Module state: MODULE_STATE_LIVE
+
+Extract the inode informations
+Mode: 100664
+There was a regular file(S_IFREG)
+File permission: 664 
+User id: 1000 
+Group id: 1000 
+Flags: 4096 
+
+File flags: 100000 
+IOCB flags: 0 
+
+Extract the security context of a task
+User permission: root 
+
+Extract the file information!
+File name: obliviate.ko 
+Parent folder name: module/ 
+
+Extract the module informations before it run!
+Module state: MODULE_STATE_COMING
+Module name: obliviate 
+Module version: 1.0 
+Module srcversion: 0AF1619AB755524991492EC 
+
+Someone tried to register a probe to the crypto internal function called __hmac_sha256_preparekey
+It's pid is 2435, and it's comm is insmod 
+
+Someone try to find 'copy_to_kernel_nofault' function address!
+Its pid: 2437 and comm: setkey 
+^C
+Close the tracing `kernel module` pre and post execution
+*/
