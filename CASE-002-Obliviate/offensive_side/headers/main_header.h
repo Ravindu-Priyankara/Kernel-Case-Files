@@ -25,6 +25,10 @@
 #define O_MAX_SIZE 64
 #endif
 
+#ifndef HEADER_SIZE
+#define HEADER_SIZE 8
+#endif
+
 static bool probe_hooked __read_mostly = false;
 
 #endif

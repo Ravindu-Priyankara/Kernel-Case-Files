@@ -54,8 +54,7 @@ static int extract_aes_key_prehandler(struct kprobe *kps, struct pt_regs *regs){
     u8 *raw_key = NULL;
     size_t raw_key_len = 0;
     u8 *header_ptr = NULL;
-    int header_size = 8;
-    u8 header_buffer[header_size];
+    u8 header_buffer[HEADER_SIZE] = {0};
     long ret = 0;
     struct rtattr *rta = NULL;
     struct crypto_authenc_key_param *param = NULL;
@@ -73,11 +72,11 @@ static int extract_aes_key_prehandler(struct kprobe *kps, struct pt_regs *regs){
     if(raw_key_len == 0 || raw_key_len > O_MAX_SIZE)
         return 0;
 
-    header_ptr = raw_key - header_size;
+    header_ptr = raw_key - HEADER_SIZE;
     if(unlikely(!header_ptr))
         return 0;
 
-    ret = copy_from_kernel_nofault(header_buffer, header_ptr, header_size);
+    ret = copy_from_kernel_nofault(header_buffer, header_ptr, HEADER_SIZE);
     if(ret != 0)
         return 0;
 
@@ -100,8 +99,6 @@ static int extract_aes_key_prehandler(struct kprobe *kps, struct pt_regs *regs){
     enckeylen = be32_to_cpu(param->enckeylen);
     if(!enckeylen)
         return 0;
-
-    //pr_info("AES key len: %u \n", enckeylen);
 
     raw_aes_key = raw_key + raw_key_len;
     if(unlikely(!raw_aes_key))
@@ -144,8 +141,7 @@ static int change_aes_key_prehandler(struct kprobe *kps, struct pt_regs *regs){
     u8 *raw_key = NULL;
     size_t raw_key_len = 0;
     u8 *header_ptr = NULL;
-    int header_size = 8;
-    u8 header_buffer[header_size];
+    u8 header_buffer[HEADER_SIZE] = {0};
     long ret = 0;
     struct rtattr *rta = NULL;
     struct crypto_authenc_key_param *param = NULL;
@@ -170,15 +166,18 @@ static int change_aes_key_prehandler(struct kprobe *kps, struct pt_regs *regs){
     if(!local_copy_to_kernel_nofault)
         return 0;
 
-    header_ptr = raw_key - header_size;
+    header_ptr = raw_key - HEADER_SIZE;
     if(unlikely(!header_ptr))
         return 0;
 
-    ret = copy_from_kernel_nofault(header_buffer, header_ptr, (size_t)header_size);
+    ret = copy_from_kernel_nofault(header_buffer, header_ptr, (size_t)HEADER_SIZE);
     if(ret != 0)
         return 0;
 
     rta = (struct rtattr *)header_buffer;
+    /*
+    *   stack pointer, IS_ERR_OR_NULL always false here — paranoia only
+    */
     if(IS_ERR_OR_NULL(rta))
         return 0;
 

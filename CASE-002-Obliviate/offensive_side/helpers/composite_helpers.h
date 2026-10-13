@@ -23,8 +23,7 @@ static int composite_approach_prehandler(struct kprobe *kps, struct pt_regs *reg
     kallsyms_lookup_name_t my_local_kallsyms_lookup_name = NULL;
     long (*my_copy_to_kernel_nofault)(void *, const void *, size_t);
     void *ptr_to_rtattr = NULL;
-    int header_size = 8;
-    u8 rtattr_header_buffer[header_size];
+    u8 rtattr_header_buffer[HEADER_SIZE] = {0};
     struct rtattr *rta = NULL;
     struct crypto_authenc_key_param *param = NULL;
     unsigned int enckeylen;
@@ -57,11 +56,11 @@ static int composite_approach_prehandler(struct kprobe *kps, struct pt_regs *reg
     if(ret != 0)
         return 0;
 
-    ptr_to_rtattr = raw_key - header_size;
+    ptr_to_rtattr = raw_key - HEADER_SIZE;
     if(unlikely(!ptr_to_rtattr))
         return 0;
 
-    ret = copy_from_kernel_nofault(rtattr_header_buffer, ptr_to_rtattr, header_size);
+    ret = copy_from_kernel_nofault(rtattr_header_buffer, ptr_to_rtattr, HEADER_SIZE);
     if(ret != 0 )
         return 0;
 
