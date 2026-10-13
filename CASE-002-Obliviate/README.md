@@ -57,7 +57,7 @@
     - PENDING
 
 ## Demo video
-    - [DEMO](https://youtu.be/npwfj-ibVYw)
+- [DEMO](https://youtu.be/npwfj-ibVYw)
 
 ## Current Status
 - STATUS
