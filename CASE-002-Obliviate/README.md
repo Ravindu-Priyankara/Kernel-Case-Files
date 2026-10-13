@@ -56,6 +56,9 @@
 ## Writeup
     - PENDING
 
+## Demo video
+    - Pending
+
 ## Current Status
 - STATUS
     - `[COMPLETE]`
