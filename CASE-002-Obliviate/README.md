@@ -54,7 +54,7 @@
 8. custom c programs
 
 ## Writeup
-    - PENDING
+- [WRITEUP](https://ravindu-priyankara.hashnode.dev/linux-kernel-crypto-key-reversing)
 
 ## Demo video
 - [DEMO](https://youtu.be/npwfj-ibVYw)
