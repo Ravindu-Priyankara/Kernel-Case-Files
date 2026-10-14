@@ -176,10 +176,6 @@
 #error"Put your own credit card on the AWS billing account first."
 #endif
 
-#if((DIR_DEPTH) && (!ENABLE_ENFORCEMENT))
-#error"You just toggled the nervous system to 1, but brain.exe was not found."
-#endif
-
 #if((O_WRONLY != 00000001) || (O_RDWR != 00000002) || (O_CREAT != 00000100))
 #error"Don't touch this flag unless your goal is to invite hackers to store their malware in our most trusted directory."
 #endif
