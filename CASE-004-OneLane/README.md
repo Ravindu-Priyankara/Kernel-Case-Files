@@ -153,4 +153,4 @@ Sometimes the interesting bugs aren't hiding between CPUs. They're hiding in the
 
 ## Writeup
 
-- 
+- [WRITEUP](https://ravindu-priyankara.hashnode.dev/onelane-reverse-engineering-lost-updates-in-ebpf-per-cpu-counters-under-interrupt-pressure)
